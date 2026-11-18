@@ -370,11 +370,23 @@ export class LettaAcpAgent {
       selected?.id ??
       models.find((entry) => entry.isDefault)?.id ??
       models[0]?.id;
-    const options = models.map((entry) => ({
-      value: entry.id,
-      name: entry.label,
-      ...(entry.description ? { description: entry.description } : {}),
-    }));
+    // The catalog lists model variants that share one label — for example one
+    // entry per reasoning effort ("...-none" through "...-high"). A client that
+    // renders labels alone shows them as identical rows, so disambiguate any
+    // label that occurs more than once.
+    const labelCounts = new Map<string, number>();
+    for (const model of models) {
+      labelCounts.set(model.label, (labelCounts.get(model.label) ?? 0) + 1);
+    }
+    const options = models.map((entry) => {
+      const shared = (labelCounts.get(entry.label) ?? 1) > 1;
+      const name = shared ? `${entry.label} (${variantSuffix(entry.label, entry.id)})` : entry.label;
+      return {
+        value: entry.id,
+        name,
+        ...(entry.description ? { description: entry.description } : {}),
+      };
+    });
 
     // A custom model handle may be active even when it is not in the curated
     // catalog. ACP requires currentValue to identify one of the options, so
@@ -1443,4 +1455,13 @@ export function toLettaContent(blocks: ContentBlock[]): MessageContentItem[] {
 function log(message: string): void {
   // stdout carries the ACP JSON-RPC stream; all logging goes to stderr.
   console.error(`[letta-acp] ${message}`);
+}
+
+/** The part of `id` that distinguishes it from its shared catalog label. */
+function variantSuffix(label: string, id: string): string {
+  if (id.startsWith(label)) {
+    const tail = id.slice(label.length).replace(/^[-:\s]+/, "");
+    if (tail) return tail;
+  }
+  return id;
 }
