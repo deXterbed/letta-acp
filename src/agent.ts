@@ -929,7 +929,14 @@ export class LettaAcpAgent {
     }
   }
 
-  shutdown(): void {
+  /**
+   * Releases everything that keeps the process alive after the client
+   * disconnects. Closing the sessions is not enough: the client owns the
+   * lazily-started local App Server, and that child's process handles keep the
+   * event loop running long after the ACP connection is gone. Leaving it open
+   * stranded an adapter and its app-server behind on every reconnect.
+   */
+  async shutdown(): Promise<void> {
     for (const state of this.sessions.values()) {
       try {
         state.session.close();
@@ -938,6 +945,11 @@ export class LettaAcpAgent {
       }
     }
     this.sessions.clear();
+    try {
+      await this.client.close();
+    } catch {
+      // best-effort cleanup on connection close
+    }
   }
 
   /**
